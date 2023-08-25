@@ -1,3 +1,4 @@
+#!/bin/bash
 echo ' _________________'
 echo '< Docker NODE CLI >'
 echo ' -----------------'

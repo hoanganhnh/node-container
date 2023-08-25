@@ -19,7 +19,6 @@ UPGRADE_PACKAGES=${5:-"true"}
 INSTALL_OH_MYS=${6:-"true"}
 ADD_NON_FREE_PACKAGES=${7:-"false"}
 SCRIPT_DIR="$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)"
-MARKER_FILE="/usr/local/etc/vscode-dev-containers/common"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo -e 'Script must be run as root. Use sudo, su, or add "USER root" to your Dockerfile before running this script.'
@@ -48,13 +47,6 @@ elif [ "${USERNAME}" = "none" ]; then
     USERNAME=root
     USER_UID=0
     USER_GID=0
-fi
-
-# Load markers to see which steps have already run
-if [ -f "${MARKER_FILE}" ]; then
-    echo "Marker file found:"
-    cat "${MARKER_FILE}"
-    source "${MARKER_FILE}"
 fi
 
 # Ensure apt is in non-interactive to avoid prompts
@@ -228,38 +220,6 @@ fi
 if  [ ! -f "${user_rc_path}/.profile" ] || [ ! -s "${user_rc_path}/.profile" ] ; then
     cp  /etc/skel/.profile "${user_rc_path}/.profile"
 fi
-
-# .bashrc/.zshrc snippet
-rc_snippet="$(cat << 'EOF'
-
-if [ -z "${USER}" ]; then export USER=$(whoami); fi
-if [[ "${PATH}" != *"$HOME/.local/bin"* ]]; then export PATH="${PATH}:$HOME/.local/bin"; fi
-
-# Display optional first run image specific notice if configured and terminal is interactive
-if [ -t 1 ] && [[ "${TERM_PROGRAM}" = "vscode" || "${TERM_PROGRAM}" = "codespaces" ]] && [ ! -f "$HOME/.config/vscode-dev-containers/first-run-notice-already-displayed" ]; then
-    if [ -f "/usr/local/etc/vscode-dev-containers/first-run-notice.txt" ]; then
-        cat "/usr/local/etc/vscode-dev-containers/first-run-notice.txt"
-    elif [ -f "/workspaces/.codespaces/shared/first-run-notice.txt" ]; then
-        cat "/workspaces/.codespaces/shared/first-run-notice.txt"
-    fi
-    mkdir -p "$HOME/.config/vscode-dev-containers"
-    # Mark first run notice as displayed after 10s to avoid problems with fast terminal refreshes hiding it
-    ((sleep 10s; touch "$HOME/.config/vscode-dev-containers/first-run-notice-already-displayed") &)
-fi
-
-# Set the default git editor if not already set
-if [ -z "$(git config --get core.editor)" ] && [ -z "${GIT_EDITOR}" ]; then
-    if  [ "${TERM_PROGRAM}" = "vscode" ]; then
-        if [[ -n $(command -v code-insiders) &&  -z $(command -v code) ]]; then 
-            export GIT_EDITOR="code-insiders --wait"
-        else 
-            export GIT_EDITOR="code --wait"
-        fi
-    fi
-fi
-
-EOF
-)"
 
 # code shim, it fallbacks to code-insiders if code is not available
 cat << 'EOF' > /usr/local/bin/code
@@ -465,12 +425,10 @@ if [ -f "${SCRIPT_DIR}/meta.env" ]; then
 fi
 
 # Write marker file
-mkdir -p "$(dirname "${MARKER_FILE}")"
 echo -e "\
     PACKAGES_ALREADY_INSTALLED=${PACKAGES_ALREADY_INSTALLED}\n\
     LOCALE_ALREADY_SET=${LOCALE_ALREADY_SET}\n\
     EXISTING_NON_ROOT_USER=${EXISTING_NON_ROOT_USER}\n\
-    RC_SNIPPET_ALREADY_ADDED=${RC_SNIPPET_ALREADY_ADDED}\n\
-    ZSH_ALREADY_INSTALLED=${ZSH_ALREADY_INSTALLED}" > "${MARKER_FILE}"
+    RC_SNIPPET_ALREADY_ADDED=${RC_SNIPPET_ALREADY_ADDED}"
 
 echo "Done!"
