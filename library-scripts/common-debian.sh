@@ -229,8 +229,14 @@ if  [ ! -f "${user_rc_path}/.profile" ] || [ ! -s "${user_rc_path}/.profile" ] ;
     cp  /etc/skel/.profile "${user_rc_path}/.profile"
 fi
 
+# create motd template
 if [ ! -f "${user_rc_path}/.motd" ] || [ ! -s "${user_rc_path}/.motd" ] ; then
-    cp  /tmp/scripts/.motd "/root/.motd"
+    cp  /tmp/scripts/.motd "${user_rc_path}/.motd"
+fi
+
+# create custom bash template
+if [ ! -f "${user_rc_path}/.bash-custom" ] || [ ! -s "${user_rc_path}/.bash-custom" ] ; then
+    cp  /tmp/scripts/.bash-custom "${user_rc_path}/.bash-custom"
 fi
 
 
@@ -287,6 +293,7 @@ EOF
 if [ "${USERNAME}" != "root" ]; then
     echo "${show_motd}" >> /etc/bash.bashrc
 fi
+
 
 # code shim, it fallbacks to code-insiders if code is not available
 cat << 'EOF' > /usr/local/bin/code
@@ -375,6 +382,23 @@ __zsh_prompt
 
 EOF
 )"
+
+# custom bash for user
+custom_bash_for_user="$(cat << 'EOF'
+
+# Custom bash for user
+HISTCONTROL=ignoreboth:erasedups
+if [ -f ~/.bash-custom ] ; then
+source ~/.bash-custom
+fi
+
+EOF
+)"
+
+if [ "${USERNAME}" != "root" ]; then
+    echo "${custom_bash_for_user}" >> "${user_rc_path}/.bashrc"
+fi
+
 
 # Add RC snippet and custom bash prompt
 if [ "${RC_SNIPPET_ALREADY_ADDED}" != "true" ]; then
