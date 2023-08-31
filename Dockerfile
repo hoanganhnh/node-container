@@ -7,6 +7,7 @@ ARG INSTALL_ZSH="true"
 # [Option] Upgrade OS packages to their latest versions
 ARG UPGRADE_PACKAGES="true"
 
+
 # Install needed packages, yarn, nvm and setup non-root user. Use a separate RUN statement to add your own depende\
 ARG USERNAME=node
 ARG USER_UID=1000
@@ -16,7 +17,7 @@ ENV NVM_DIR=/usr/local/share/nvm
 ENV NVM_SYMLINK_CURRENT=true \ 
     PATH=${NPM_GLOBAL}/bin:${NVM_DIR}/current/bin:${PATH}
 COPY library-scripts/*.sh library-scripts/*.env /tmp/library-scripts/
-COPY scripts/*.sh scripts/*.env /tmp/scripts/
+COPY scripts/* /tmp/scripts/
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     # Remove imagemagick due to https://security-tracker.debian.org/tracker/CVE-2019-10131
@@ -46,3 +47,5 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     # Clean up
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /root/.gnupg /tmp/library-scripts 
     # && bash /tmp/scripts/motd.sh
+
+CMD [ "bash" ]

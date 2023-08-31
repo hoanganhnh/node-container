@@ -19,6 +19,7 @@ UPGRADE_PACKAGES=${5:-"true"}
 INSTALL_OH_MYS=${6:-"true"}
 ADD_NON_FREE_PACKAGES=${7:-"false"}
 SCRIPT_DIR="$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)"
+MARKER_FILE="/usr/local/etc/vscode-dev-containers/common"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo -e 'Script must be run as root. Use sudo, su, or add "USER root" to your Dockerfile before running this script.'
@@ -47,6 +48,13 @@ elif [ "${USERNAME}" = "none" ]; then
     USERNAME=root
     USER_UID=0
     USER_GID=0
+fi
+
+# Load markers to see which steps have already run
+if [ -f "${MARKER_FILE}" ]; then
+    echo "Marker file found:"
+    cat "${MARKER_FILE}"
+    source "${MARKER_FILE}"
 fi
 
 # Ensure apt is in non-interactive to avoid prompts
@@ -221,6 +229,65 @@ if  [ ! -f "${user_rc_path}/.profile" ] || [ ! -s "${user_rc_path}/.profile" ] ;
     cp  /etc/skel/.profile "${user_rc_path}/.profile"
 fi
 
+if [ ! -f "${user_rc_path}/.motd" ] || [ ! -s "${user_rc_path}/.motd" ] ; then
+    cp  /tmp/scripts/.motd "/root/.motd"
+fi
+
+
+# .bashrc/.zshrc snippet
+rc_snippet="$(cat << 'EOF'
+
+if [ -z "${USER}" ]; then export USER=$(whoami); fi
+if [[ "${PATH}" != *"$HOME/.local/bin"* ]]; then export PATH="${PATH}:$HOME/.local/bin"; fi
+
+# Display optional first run image specific notice if configured and terminal is interactive
+if [ -t 1 ] && [[ "${TERM_PROGRAM}" = "vscode" || "${TERM_PROGRAM}" = "codespaces" ]] && [ ! -f "$HOME/.config/vscode-dev-containers/first-run-notice-already-displayed" ]; then
+    if [ -f "/usr/local/etc/vscode-dev-containers/first-run-notice.txt" ]; then
+        cat "/usr/local/etc/vscode-dev-containers/first-run-notice.txt"
+    elif [ -f "/workspaces/.codespaces/shared/first-run-notice.txt" ]; then
+        cat "/workspaces/.codespaces/shared/first-run-notice.txt"
+    fi
+    mkdir -p "$HOME/.config/vscode-dev-containers"
+    # Mark first run notice as displayed after 10s to avoid problems with fast terminal refreshes hiding it
+    ((sleep 10s; touch "$HOME/.config/vscode-dev-containers/first-run-notice-already-displayed") &)
+fi
+
+# Set the default git editor if not already set
+if [ -z "$(git config --get core.editor)" ] && [ -z "${GIT_EDITOR}" ]; then
+    if  [ "${TERM_PROGRAM}" = "vscode" ]; then
+        if [[ -n $(command -v code-insiders) &&  -z $(command -v code) ]]; then 
+            export GIT_EDITOR="code-insiders --wait"
+        else 
+            export GIT_EDITOR="code --wait"
+        fi
+    fi
+fi
+
+EOF
+)"
+
+# .bashrc show motd
+show_motd="$(cat << 'EOF'
+
+if [ -z "${USER}" ]; then export USER=$(whoami); fi
+if [[ "${PATH}" != *"$HOME/.local/bin"* ]]; then export PATH="${PATH}:$HOME/.local/bin"; fi
+
+# Show motd banner
+[ ! -z "$TERM" -a -r ~/.motd ] && cat ~/.motd
+HISTTIMEFORMAT="%d/%m/%Y %T "
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+alias fgrep='fgrep --color=auto'
+alias egrep='egrep --color=auto'
+alias diff='diff --color=auto'
+
+EOF
+)"
+
+if [ "${USERNAME}" != "root" ]; then
+    echo "${show_motd}" >> /etc/bash.bashrc
+fi
+
 # code shim, it fallbacks to code-insiders if code is not available
 cat << 'EOF' > /usr/local/bin/code
 #!/bin/sh
@@ -260,45 +327,23 @@ codespaces_bash="$(cat \
 
 # Codespaces bash prompt theme
 __bash_prompt() {
-    # local userpart='`export XIT=$? \
-    #     && [ ! -z "${GITHUB_USER}" ] && echo -n "\[\033[0;32m\]@${GITHUB_USER} " || echo -n "\[\033[0;32m\]\u " \
-    #     && [ "$XIT" -ne "0" ] && echo -n "\[\033[1;31m\]➜" || echo -n "\[\033[0m\]➜"`'
-    # local gitbranch='`\
-    #     if [ "$(git config --get codespaces-theme.hide-status 2>/dev/null)" != 1 ]; then \
-    #         export BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null); \
-    #         if [ "${BRANCH}" != "" ]; then \
-    #             echo -n "\[\033[0;36m\](\[\033[1;31m\]${BRANCH}" \
-    #             && if git ls-files --error-unmatch -m --directory --no-empty-directory -o --exclude-standard ":/*" > /dev/null 2>&1; then \
-    #                     echo -n " \[\033[1;33m\]✗"; \
-    #             fi \
-    #             && echo -n "\[\033[0;36m\]) "; \
-    #         fi; \
-    #     fi`'
-    # local lightblue='\[\033[1;34m\]'
-    # local removecolor='\[\033[0m\]'
-    # PS1="${userpart} ${lightblue}\w ${gitbranch}${removecolor}\$ "
-    RESET="\[\033[0m\]"
-    RED="\[\033[1;31m\]"
-    CYAN="\[\033[1;36m\]"
-    GREEN="\[\033[1;32m\]"
-    BLUE="\[\033[1;34m\]"
-    YELLOW="\[\033[1;33m\]"
-    WHITE="\[\033[1;37m\]"
-    
-    PS_LINE=`printf -- '- %.0s' {1..200}`
-    function parse_git_branch {
-        PS_BRANCH=''
-        PS_FILL=${PS_LINE:0:$COLUMNS}
-        ref=$(git symbolic-ref HEAD 2> /dev/null) || return
-        PS_BRANCH="(${ref#refs/heads/}) "   
-    }
-    PROMPT_COMMAND=parse_git_branch
-    PS_INFO="$CYAN\u@\h$RESET:$GREEN\w"
-    PS_GIT="$YELLOW\$PS_BRANCH"
-    PS_TIME="\[\033[\$((COLUMNS-10))G\] $RED[\t]"
-
-    BASH_STATUS='`if [ $? = 0 ]; then echo "\$"; else echo "\[\033[01;31m\]\$"; fi`'
-    PS1="\n\${PS_FILL}\[\033[0G\]${PS_INFO} ${PS_GIT}${PS_TIME}\n${WHITE}${BASH_STATUS}${RESET} "
+    local userpart='`export XIT=$? \
+        && [ ! -z "${GITHUB_USER}" ] && echo -n "\[\033[0;32m\]@${GITHUB_USER} " || echo -n "\[\033[0;32m\]\u " \
+        && [ "$XIT" -ne "0" ] && echo -n "\[\033[1;31m\]➜" || echo -n "\[\033[0m\]➜"`'
+    local gitbranch='`\
+        if [ "$(git config --get codespaces-theme.hide-status 2>/dev/null)" != 1 ]; then \
+            export BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null); \
+            if [ "${BRANCH}" != "" ]; then \
+                echo -n "\[\033[0;36m\](\[\033[1;31m\]${BRANCH}" \
+                && if git ls-files --error-unmatch -m --directory --no-empty-directory -o --exclude-standard ":/*" > /dev/null 2>&1; then \
+                        echo -n " \[\033[1;33m\]✗"; \
+                fi \
+                && echo -n "\[\033[0;36m\]) "; \
+            fi; \
+        fi`'
+    local lightblue='\[\033[1;34m\]'
+    local removecolor='\[\033[0m\]'
+    PS1="${userpart} ${lightblue}\w ${gitbranch}${removecolor}\$ "
     unset -f __bash_prompt
 }
 __bash_prompt
@@ -425,10 +470,12 @@ if [ -f "${SCRIPT_DIR}/meta.env" ]; then
 fi
 
 # Write marker file
+mkdir -p "$(dirname "${MARKER_FILE}")"
 echo -e "\
     PACKAGES_ALREADY_INSTALLED=${PACKAGES_ALREADY_INSTALLED}\n\
     LOCALE_ALREADY_SET=${LOCALE_ALREADY_SET}\n\
     EXISTING_NON_ROOT_USER=${EXISTING_NON_ROOT_USER}\n\
-    RC_SNIPPET_ALREADY_ADDED=${RC_SNIPPET_ALREADY_ADDED}"
+    RC_SNIPPET_ALREADY_ADDED=${RC_SNIPPET_ALREADY_ADDED}\n\
+    ZSH_ALREADY_INSTALLED=${ZSH_ALREADY_INSTALLED}" > "${MARKER_FILE}"
 
 echo "Done!"
