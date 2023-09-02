@@ -3,14 +3,15 @@ ARG VARIANT=16-bullseye
 FROM node:${VARIANT}
 
 # [Option] Install zsh
-ARG INSTALL_ZSH="false"
+ARG INSTALL_ZSH="true"
 # [Option] Upgrade OS packages to their latest versions
 ARG UPGRADE_PACKAGES="true"
 # [Option] Install Oh My Zsh
-ARG INSTALL_OH_MYS="false"
+ARG INSTALL_OH_MYS="true"
 # [Option] Add non-free packages
 ARG ADD_NON_FREE_PACKAGES="false"
 
+LABEL maintainer=hoahoanganh20012001@gmail.com
 
 # Install needed packages, yarn, nvm and setup non-root user. Use a separate RUN statement to add your own depende\
 ARG USERNAME=node

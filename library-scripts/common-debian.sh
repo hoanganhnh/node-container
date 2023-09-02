@@ -353,7 +353,7 @@ __bash_prompt() {
     PS1="${userpart} ${lightblue}\w ${gitbranch}${removecolor}\$ "
     unset -f __bash_prompt
 }
-__bash_prompt
+# __bash_prompt
 
 EOF
 )"
