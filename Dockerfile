@@ -25,8 +25,6 @@ COPY library-scripts/*.sh library-scripts/*.env /tmp/library-scripts/
 COPY scripts/* /tmp/scripts/
 COPY docker-custom-entrypoint.sh /docker-custom-entrypoint.sh
 
-RUN chmod +x /docker-custom-entrypoint.sh
-
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     # Remove imagemagick due to https://security-tracker.debian.org/tracker/CVE-2019-10131
     && apt-get purge -y imagemagick imagemagick-6-common \
@@ -51,7 +49,11 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     # Install python-is-python3 on bullseye to prevent node-gyp regressions
     && . /etc/os-release \
     && if [ "${VERSION_CODENAME}" = "bullseye" ]; then apt-get -y install --no-install-recommends python-is-python3; fi \
-    && bash /tmp/library-scripts/user.sh \
+    # setup bash
+    && bash /tmp/scripts/user-setup.sh \
+    && bash /tmp/scripts/git-setup.sh \
+    # custom docker entrypoint
+    && chmod +x /docker-custom-entrypoint.sh \
     # Clean up
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /root/.gnupg /tmp/library-scripts \
     && rm -rf /tmp/scripts 
